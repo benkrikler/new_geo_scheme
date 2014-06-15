@@ -3,6 +3,7 @@
 #include "COMETNewMessenger.hh"
 #include <G4Box.hh>
 #include <G4Tubs.hh>
+#include "COMETComponentFactory.hh"
 
 TestNewGeometry::~TestNewGeometry(){
     delete fMessenger;
@@ -20,4 +21,8 @@ G4LogicalVolume* TestNewGeometry::GetPiece(){
     G4VSolid* tube=MakeCylinder("Tube");
     G4LogicalVolume* logicTube=MakeLogicalVolume(tube,"Tube:Material","Tube");
     PlacePiece("Tube",logicContainer, logicTube);
+
+    return logicContainer;
 } 
+
+COMETRegisterComponent( TestNew );
