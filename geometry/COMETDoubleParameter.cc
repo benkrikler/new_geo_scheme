@@ -25,7 +25,8 @@ void COMETDoubleParameter::MakeValue(){
     SetValue(fExpression->Eval(0));
 }
 
-COMETDoubleParameter::ParsingError COMETDoubleParameter::SetSource(const G4String& source){
+COMETDoubleParameter::ParsingError COMETDoubleParameter::SetSource( G4String source){
+    source=source.strip(G4String::both);
     if(fExpression) delete fExpression;
     ParsingError ret_val=kSuccess;
     if (source[0]=='=') ret_val= SetByExpression(source.substr(1,std::string::npos));
@@ -65,14 +66,10 @@ COMETDoubleParameter::ParsingError COMETDoubleParameter::SetByExpression(G4Strin
         if(right_br==std::string::npos) return kUnmatchedDelimiter;
 
         // Get the index for this dependency
-        PrintValue(left_br);
-        PrintValue(right_br);
         G4String parameter=expression(left_br+1,right_br-left_br-1);
-        PrintValue(parameter);
         index= AddDependency(parameter);
         if(index<0) return kBadDependency;
         if(index>=kMaxParams) return kTooManyParams;
-        PrintValue(index);
 
         // Replace parameter name with index
         expression.replace(left_br+1, right_br-left_br-1, Form("%d",index));

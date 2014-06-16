@@ -27,7 +27,7 @@ class COMETDoubleParameter:public COMETVCombinationParameter<double>{
         // ----- end error codes-------
 
         void MakeValue();
-        ParsingError SetSource(const G4String& source);
+        ParsingError SetSource( G4String source);
         G4String GetDescription()const;
 
     private:

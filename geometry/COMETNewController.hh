@@ -17,7 +17,14 @@ class COMETNewController:public COMETComponentController{
         using COMETComponentController::AddParameter;
 
         void PrintParameter(const G4String& name){COMETComponentController::PrintOneParameter(name);};
+
         void MakeLength(const G4String& name,const G4String& assignment);
+        void MakeAngle(const G4String& name,const G4String& assignment);
+        void MakeMaterial(const G4String& name,const G4String& assignment);
+        void MakeRotation(const G4String& name,const G4String& assignment);
+        void MakePosition(const G4String& name,const G4String& assignment);
+        void MakeAxis(const G4String& name,const G4String& assignment);
+        void MakeInt(const G4String& name,const G4String& assignment);
 
 };
 
