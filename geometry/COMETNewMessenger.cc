@@ -6,10 +6,10 @@ void COMETNewMessenger::Init(COMETComponentController* c){
     // Commands take ownership of the 
     G4UIparameter* name=new G4UIparameter ("Name", 's', false);
 
-    G4String cmd_name=GetFullComponentName()+"/Distance";
+    G4String cmd_name=GetFullComponentName()+"/Dimension";
     fMakeLength=new G4UIcommand(cmd_name.c_str(),this);
     fMakeLength->SetParameter(new G4UIparameter(*name));
-    fMakeLength->SetGuidance("Add a new distance parameter");
+    fMakeLength->SetGuidance("Add a new dimension parameter such as a length or width");
     fMakeLength->SetGuidance("Either assign a value with units or provide an equation.");
     fMakeLength->SetGuidance("If you use a value with units, separate the units from the number by a space");
     fMakeLength->SetGuidance("If you provide an equation, start the equation with an '=' and "
