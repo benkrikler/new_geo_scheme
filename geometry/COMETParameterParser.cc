@@ -1,93 +1,115 @@
 #include "COMETParameterParser.hh"
-#include <cctype>
-#include <G4Tokenizer.hh>
+#include "COMETParameterList.hh"
+#include <iostream>
+#include <TFormula.h>
+#include <ICOMETLog.hxx>
+using COMET::geometry::EParameterError;
+using COMET::geometry::EUnmatchedBracket;
+using COMET::geometry::ENonExistentParameter;
+using COMET::geometry::EWrongReturnType;
+using COMET::geometry::EMethodNotApplicable;
+using COMET::geometry::ETooFewParameters;
+using COMET::geometry::ENestedSqBr;
 
-using namespace COMET::geo_scheme::parser;
-   static const G4String fTokenDelimiters;
+namespace{
+    enum state{ kParameter, kFunction , fIgnore ,kZero,kStart_param, kStop_param, kStart_func, kStop_func,kArgument};
 
-
-Token Tokenizer::operator()()const{
-  size_t position=fNextStart;
-
-  // if we've reached the end return a blank string
-  if(position > fInput.size()) return "";
-
-  Token new_token;
-  TokenType type;
-  char c_curr;
-  const char* delimiters=" \t[]
-  // Wind on until we know what type this token will be
-  while(position<fInput.size()){
-    c_curr=fInput[position];
-    position++;
-
-    // check what type of token we're making
-    type=FirstCharTokenType(c_curr);
-
-    // if it's whitespace so far, skip
-    if(type==kWhitespace) continue;
-
-    // if we've just found a second ambiguous character complain
-    if(new_token.GetType()==kAmbiguous && type==kAmbiguous){
-      throw generic_parse_problem(position);
+    void IncrementState(state& curr,state& prev){
+        switch(curr){
+            case kStart_param : prev=curr ; curr=kParameter ; break ; 
+            case kStop_param  : prev=curr ; curr=fIgnore    ; break ; 
+            case kStart_func  : prev=curr ; curr=kFunction  ; break ; 
+            case kStop_func   : prev=curr ; curr=kArgument  ; break ; 
+            default: break;
+        }
     }
-    // Add this character to the token
-    if(new_token.GetType()==kAmbiguous && type=kString) new_token.SetType(kFunction);
-    else new_token.SetType(type);
-    new_token+=c_curr;
-
-    // if it's ambiguous, move on
-    if(type==kAmbiguous){
-      continue;
-    }else{
-      break;
-    }
-
-  }
-
-  // Now get all the remaining characters that match this token type
-  c_curr=fInput[position];
-  while(CheckTokenType(c_curr, new_token.GetType()) && position<fInput.size() ){
-    new_token+=c_curr;
-    position++
-  }
-
-  // Now set the beginning of the next token
-  fNextStart=position;
 }
 
-TokenType Tokenizer::FirstCharTokenType(char c)const{
-  TokenType ret_val;
-    if(isalpha(c)) ret_val =  kString;
-    else if(isdigit(c)) ret_val =  kNumber;
-    else if(c=='.') ret_val =  kAmbiguous;
-    else if(c=='(') ret_val =  kBracket;
-    else if(c=='[') ret_val =  kParameter;
-    else if(ispunct(c)) ret_val =  kOperator;
-    else if(isspace(c)) ret_val =  kWhitespace;
-    return ret_val;
+COMETParameterParser::COMETParameterParser(COMETComponentController* c, COMETParameterList* d):
+    fController(c),fDelimeter("[,=]():"," \t\n"),fDependencies(d){
 }
 
-bool Tokenizer::CheckTokenType(char c, TokenType type)const{
-  bool go_on;
-  switch (type){
-    case kString:
-      go_on=isalnum(c);
-      break;
-    case kNumber:
-      go_on=(isdigit(c)|| c=='.');
-      break;
-    case kOperator:
-      go_on=(ispunct(c));
-      break;
-    case kFunction:
-      go_on=(isalnum(c) || c=='_');
-      break;
-    case kBracket: go_on=false;
-      break;
-    case kParameter:
-      go_on=(isalnum(c) || c=='_' || c=':' || c==']');
-      break;
-  }
-  return ret_val;
+std::string COMETParameterParser::Process(const std::string& input) {
+    fDependencies->Clear();
+    return Parse(input);
+}
+
+std::string COMETParameterParser::Parse(const std::string& input) {
+    COMETTokenizer<COMETDelimeter> tokens(fDelimeter,input);
+    state curr=fIgnore;
+    state prev=kZero;
+    int i=0;
+    int br_depth=0;
+    std::string sub_sequence;
+    std::string replaced;
+    while(tokens.next()){
+        // Check for brackets
+        if(tokens()=="(") { br_depth++; if(br_depth==1)continue;
+        }else if(tokens()==")") { 
+            br_depth--;
+            // Did we just find the last bracket ?
+            if(0==br_depth) { 
+                replaced+="("+Parse(sub_sequence)+")";//,controller);
+                sub_sequence="";
+                continue;
+            }
+        }
+        // If we're inside brackets collect tokens then continue
+        if(br_depth>0) {
+            sub_sequence+=tokens(); 
+            IncrementState(curr,prev);
+            continue;
+        }
+
+        // Not inside brackets so check for special types of token
+        if(  tokens()[0]=='['    ) { 
+          if(curr==kParameter || curr==kStart_param) { throw ENestedSqBr(input); return "";}
+          else prev=curr ; curr =kStart_param; 
+        }else if(tokens()[0]==']') { prev=curr ; curr = kStop_param;    
+            int ret=AddDependency(sub_sequence);
+            if(ret<0) throw ENonExistentParameter(sub_sequence);
+            replaced+=Form("[%d]",ret);
+        }else {
+            IncrementState(curr,prev);
+            sub_sequence+=tokens();
+            replaced+=tokens();
+        }
+
+        // debug
+            const char*  State_str[]={ "parameter", "function" , "ignorable" ,
+                    "zero","start_param", "stop_param",
+                    "start_func", "stop_func","argument"};
+            COMETLog("Token "<<i<<": '"<<tokens()<<"' is "<<State_str[curr]);
+            i++;
+        // debug
+    }
+    return replaced;
+}
+
+int COMETParameterParser::AddDependency(const G4String& target){
+    // Check if we already know of this parameter
+    DependencyList::const_iterator it =fParameters.find(target);
+    if(it!= fParameters.end()) return it->second.id;
+
+    // Make a new parameter
+    COMETExternalParameter<double>* param=COMETExternalParameter<double>::Make(fController,target);
+    if(!param) return -1;
+
+    // add the new parameter to the dependency lists
+    fParametersIndices.push_back(target);
+    IdParam step;
+    step.id=fParametersIndices.size()-1;
+    step.param=param;
+    fParameters[target]=step;
+
+    // return the position in the ordered list of dependencies
+    return step.id;
+}
+
+void COMETParameterParser::PrintDependencies(const std::string& prefix){
+    for(DependencyIndices::const_iterator i_depend=fParametersIndices.begin();
+            i_depend!=fParametersIndices.end();i_depend++){
+        COMETLog(prefix<<*i_depend);
+    }
+
 }
